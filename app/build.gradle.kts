@@ -2,6 +2,8 @@
 
 import java.util.Properties
 import java.io.FileInputStream
+import com.android.build.api.variant.ApplicationVariant
+import com.android.build.api.variant.AndroidComponentsExtension
 
 plugins {
     id("com.android.application")
@@ -18,25 +20,8 @@ android {
         applicationId = "de.salomax.currencies"
         minSdk = 26
         targetSdk = 35
-
         versionName = "1.23.0"
         versionCode = 12300
-
-        // ❌ Gradle 8+ 不允许使用 archivesBaseName
-        // setProperty("archivesBaseName", "$applicationId-v$versionCode")
-    }
-
-    // ✅ Gradle 8/9/10 正确的 APK 命名方式
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            val appId = variant.applicationId.replace(".", "-")
-            val versionCode = variant.versionCode
-            val flavor = variant.flavorName ?: "noflavor"
-            val buildType = variant.buildType.name
-
-            output.outputFileName =
-                "${appId}-v${versionCode}-${flavor}-${buildType}.apk"
-        }
     }
 
     signingConfigs {
@@ -79,7 +64,10 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        // 官方推荐方式
+        compilerOptions {
+            jvmTarget.set(JavaVersion.VERSION_17.toString())
+        }
     }
 
     testOptions {
@@ -95,9 +83,25 @@ android {
     }
 }
 
+// ---------------- APK 文件自定义命名（兼容 Gradle 9 + Kotlin DSL） ----------------
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val appId = variant.applicationId.get().replace(".", "-")
+            val versionCode = variant.versionCode.get()
+            val flavor = variant.flavorName ?: "noflavor"
+            val buildType = variant.buildType
+
+            output.outputFileName.set("${appId}-v${versionCode}-${flavor}-${buildType}.apk")
+        }
+    }
+}
+
+// ---------------- 依赖 ----------------
 dependencies {
     // kotlin
     implementation("androidx.core:core-ktx:1.16.0")
+
     // support libs
     val appCompatVersion = "1.7.1"
     implementation("androidx.appcompat:appcompat:$appCompatVersion")
@@ -123,14 +127,18 @@ dependencies {
     implementation("com.squareup.moshi:moshi-kotlin:$moshiVersion")
     ksp("com.squareup.moshi:moshi-kotlin-codegen:$moshiVersion")
 
+    // math
     implementation("org.mariuszgromada.math:MathParser.org-mXparser:4.4.3")
 
+    // charts
     implementation("com.robinhood.spark:spark:1.2.0")
 
+    // test
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.18.0")
 }
 
+// ---------------- Secrets ----------------
 fun getSecret(key: String): String? {
     val secretsFile: File = rootProject.file("secrets.properties")
     return if (secretsFile.exists()) {
@@ -142,8 +150,7 @@ fun getSecret(key: String): String? {
     }
 }
 
-// versionCode <-> versionName /////////////////////////////////////////////////////////////////////
-
+// ---------------- versionCode <-> versionName 检查 ----------------
 tasks.register("checkVersion") {
     doLast {
         val versionCode: Int? = android.defaultConfig.versionCode
@@ -155,6 +162,7 @@ tasks.register("checkVersion") {
 }
 tasks.findByName("assemble")!!.dependsOn(tasks.findByName("checkVersion")!!)
 
+// ---------------- Fastlane changelog 检查 ----------------
 tasks.register("checkFastlaneChangelog") {
     doLast {
         val versionCode: Int? = android.defaultConfig.versionCode
@@ -168,6 +176,7 @@ tasks.register("checkFastlaneChangelog") {
 }
 tasks.findByName("build")!!.dependsOn(tasks.findByName("checkFastlaneChangelog")!!)
 
+// ---------------- versionCode 生成函数 ----------------
 fun generateVersionCode(semVer: String): Int {
     return semVer.split('.')
         .map { Integer.parseInt(it) }
