@@ -18,10 +18,25 @@ android {
         applicationId = "de.salomax.currencies"
         minSdk = 26
         targetSdk = 35
-        // SemVer
+
         versionName = "1.23.0"
         versionCode = 12300
-        setProperty("archivesBaseName", "$applicationId-v$versionCode")
+
+        // ❌ Gradle 8+ 不允许使用 archivesBaseName
+        // setProperty("archivesBaseName", "$applicationId-v$versionCode")
+    }
+
+    // ✅ Gradle 8/9/10 正确的 APK 命名方式
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            val appId = variant.applicationId.replace(".", "-")
+            val versionCode = variant.versionCode
+            val flavor = variant.flavorName ?: "noflavor"
+            val buildType = variant.buildType.name
+
+            output.outputFileName =
+                "${appId}-v${versionCode}-${flavor}-${buildType}.apk"
+        }
     }
 
     signingConfigs {
@@ -54,12 +69,8 @@ android {
 
     flavorDimensions.add("version")
     productFlavors {
-        create("play") {
-            dimension = "version"
-        }
-        create("fdroid") {
-            dimension = "version"
-        }
+        create("play") { dimension = "version" }
+        create("fdroid") { dimension = "version" }
     }
 
     compileOptions {
@@ -100,20 +111,22 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("androidx.window:window:1.4.0")
     implementation("com.google.android.material:material:1.12.0")
+
     // downloader
     val fuelVersion = "2.3.1"
     implementation("com.github.kittinunf.fuel:fuel:$fuelVersion")
     implementation("com.github.kittinunf.fuel:fuel-android:$fuelVersion")
     implementation("com.github.kittinunf.fuel:fuel-coroutines:$fuelVersion")
     implementation("com.github.kittinunf.fuel:fuel-moshi:$fuelVersion")
+
     val moshiVersion = "1.15.2"
     implementation("com.squareup.moshi:moshi-kotlin:$moshiVersion")
     ksp("com.squareup.moshi:moshi-kotlin-codegen:$moshiVersion")
-    // math (v5 releases use incompatible license to fdroid: noinspection GradleDependency)
+
     implementation("org.mariuszgromada.math:MathParser.org-mXparser:4.4.3")
-    // charts
+
     implementation("com.robinhood.spark:spark:1.2.0")
-    // test
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.18.0")
 }
@@ -131,11 +144,6 @@ fun getSecret(key: String): String? {
 
 // versionCode <-> versionName /////////////////////////////////////////////////////////////////////
 
-/**
- * Checks if versionCode and versionName match.
- * Needed because of F-Droid: both have to be hard-coded and can't be assigned dynamically.
- * So at least check during build for them to match.
- */
 tasks.register("checkVersion") {
     doLast {
         val versionCode: Int? = android.defaultConfig.versionCode
@@ -147,9 +155,6 @@ tasks.register("checkVersion") {
 }
 tasks.findByName("assemble")!!.dependsOn(tasks.findByName("checkVersion")!!)
 
-/**
- * Checks if a fastlane changelog for the current version is present.
- */
 tasks.register("checkFastlaneChangelog") {
     doLast {
         val versionCode: Int? = android.defaultConfig.versionCode
@@ -163,12 +168,6 @@ tasks.register("checkFastlaneChangelog") {
 }
 tasks.findByName("build")!!.dependsOn(tasks.findByName("checkFastlaneChangelog")!!)
 
-/**
- * Generates a versionCode based on the given semVer String.
- *
- * @param semVer e.g. 1.3.1
- * @return e.g. 10301 (-> 1 03 01)
- */
 fun generateVersionCode(semVer: String): Int {
     return semVer.split('.')
         .map { Integer.parseInt(it) }
